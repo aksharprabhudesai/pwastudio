@@ -1,0 +1,27 @@
+{
+  "name": "PWA GitHub Deployer",
+  "short_name": "PWA Deployer",
+  "description": "Deploy HTML files as installable Progressive Web Apps on GitHub Pages directly from your phone.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#0D1117",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

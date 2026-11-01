@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0D1117" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Deploy HTML files as installable Progressive Web Apps on GitHub Pages directly from your phone." />
+  <title>PWA GitHub Deployer</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+          <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+          <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/>
+          <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
+        </svg>
+      </div>
+      <div>
+        <h1>PWA Deployer</h1>
+        <p class="subtitle">Mobile HTML &rarr; GitHub Pages PWA</p>
+      </div>
+    </div>
+    <button id="installAppBtn" class="btn-install hidden" type="button">
+      Install App
+    </button>
+  </header>
+
+  <main class="container">
+    <!-- STEP 1: GITHUB ACCOUNT -->
+    <section class="card" id="authSection">
+      <div class="card-header">
+        <span class="step-badge" id="step1Badge">1</span>
+        <div class="card-title-group">
+          <h2>GitHub Account</h2>
+          <p class="card-caption">100% client-side &bull; Stored only on your phone</p>
+        </div>
+      </div>
+
+      <!-- Logged Out View -->
+      <div id="loggedOutView" class="stack-md">
+        <div class="info-callout">
+          <strong>Zero-Server 1-Tap Setup:</strong> Tap the button below to open GitHub with the <code>public_repo</code> permission pre-filled, tap <em>"Generate token"</em> at the bottom of that page, and paste it here once.
+        </div>
+
+        <a
+          href="https://github.com/settings/tokens/new?scopes=public_repo&description=Mobile+PWA+GitHub+Deployer"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-primary btn-block"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/>
+            <line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+          1. Get 1-Tap GitHub Token
+        </a>
+
+        <div class="token-input-group">
+          <label for="tokenInput" class="input-label">2. Paste Personal Access Token (<code>ghp_...</code>)</label>
+          <div class="input-row">
+            <input
+              type="password"
+              id="tokenInput"
+              class="text-input"
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+            <button id="saveTokenBtn" type="button" class="btn btn-secondary">
+              Connect
+            </button>
+          </div>
+        </div>
+
+        <p id="authError" class="error-text hidden"></p>
+      </div>
+
+      <!-- Logged In View -->
+      <div id="loggedInView" class="user-banner hidden">
+        <div class="user-info">
+          <img id="userAvatar" src="" alt="Avatar" class="user-avatar" />
+          <div>
+            <div class="user-name-row">
+              <strong id="userName">GitHub User</strong>
+              <span class="verified-pill">Connected</span>
+            </div>
+            <span id="userLogin" class="user-handle">@username</span>
+          </div>
+        </div>
+        <button id="logoutBtn" type="button" class="btn btn-ghost btn-sm">
+          Disconnect
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 2: UPLOAD OR PASTE HTML / PWA FILES -->
+    <section class="card" id="filesSection">
+      <div class="card-header">
+        <span class="step-badge" id="step2Badge">2</span>
+        <div class="card-title-group">
+          <h2>Your PWA / HTML Files</h2>
+          <p class="card-caption">Pick files, a ZIP archive, a folder, or paste HTML code</p>
+        </div>
+        <button id="clearFilesBtn" type="button" class="btn btn-ghost btn-sm hidden">
+          Clear
+        </button>
+      </div>
+
+      <!-- Mode Switcher Tabs -->
+      <div class="tab-bar" role="tablist">
+        <button type="button" class="tab-btn active" id="tabUploadBtn" role="tab" aria-selected="true">
+          Upload Files / ZIP
+        </button>
+        <button type="button" class="tab-btn" id="tabPasteBtn" role="tab" aria-selected="false">
+          Paste HTML Code
+        </button>
+      </div>
+
+      <!-- Upload Panel -->
+      <div id="uploadPanel" class="stack-md">
+        <div class="upload-grid">
+          <label class="upload-tile" for="filePickerInput">
+            <input
+              type="file"
+              id="filePickerInput"
+              multiple
+              accept=".html,.htm,.css,.js,.json,.webmanifest,.png,.jpg,.jpeg,.svg,.webp,.ico,.zip,.txt,.woff,.woff2,text/html,application/zip,*/*"
+              hidden
+            />
+            <div class="tile-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="12" y1="18" x2="12" y2="12"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <span class="tile-title">Pick Files or .ZIP</span>
+            <span class="tile-sub">HTML, CSS, JS, Icons, or ZIP</span>
+          </label>
+
+          <label class="upload-tile" for="folderPickerInput">
+            <input
+              type="file"
+              id="folderPickerInput"
+              webkitdirectory
+              directory
+              multiple
+              hidden
+            />
+            <div class="tile-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <span class="tile-title">Pick Folder</span>
+            <span class="tile-sub">Entire project directory</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Paste / Quick Code Panel -->
+      <div id="pastePanel" class="stack-md hidden">
+        <textarea
+          id="htmlCodeInput"
+          class="code-textarea"
+          rows="8"
+          placeholder="<!DOCTYPE html>&#10;<html>&#10;<head>&#10;  <title>My Mobile App</title>&#10;</head>&#10;<body>&#10;  <h1>Hello World!</h1>&#10;</body>&#10;</html>"
+        ></textarea>
+        <div class="row-between">
+          <button id="loadSampleBtn" type="button" class="btn btn-ghost btn-sm">
+            Load Sample App
+          </button>
+          <button id="usePastedHtmlBtn" type="button" class="btn btn-secondary btn-sm">
+            Use This HTML
+          </button>
+        </div>
+      </div>
+
+      <!-- PWA Inspection & Auto-Upgrade Report -->
+      <div id="pwaStatusCard" class="pwa-report hidden">
+        <div class="pwa-report-header">
+          <span id="pwaStatusIcon" class="pwa-status-icon"></span>
+          <div>
+            <strong id="pwaStatusTitle">PWA Readiness Check</strong>
+            <p id="pwaStatusSubtitle" class="pwa-status-sub"></p>
+          </div>
+        </div>
+        <ul id="pwaFixesList" class="fixes-list"></ul>
+      </div>
+
+      <!-- File Chips List -->
+      <div id="fileListContainer" class="file-list-wrap hidden">
+        <div class="file-list-header">
+          <span id="fileCountLabel">Files to deploy (0)</span>
+          <button id="previewLocalBtn" type="button" class="btn btn-ghost btn-xs">
+            Preview index.html
+          </button>
+        </div>
+        <div id="fileChips" class="file-chips"></div>
+      </div>
+    </section>
+
+    <!-- STEP 3: CONFIGURE REPO & DEPLOY -->
+    <section class="card" id="deploySection">
+      <div class="card-header">
+        <span class="step-badge" id="step3Badge">3</span>
+        <div class="card-title-group">
+          <h2>Repository &amp; Publish</h2>
+          <p class="card-caption">Creates a public repo &amp; enables GitHub Pages</p>
+        </div>
+      </div>
+
+      <div class="stack-md">
+        <div>
+          <label for="repoNameInput" class="input-label">Public Repository Name</label>
+          <input
+            type="text"
+            id="repoNameInput"
+            class="text-input"
+            value="my-mobile-pwa"
+            placeholder="my-mobile-pwa"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+          />
+          <p class="url-preview">
+            Live URL: <code id="liveUrlPreview">https://username.github.io/my-mobile-pwa/</code>
+          </p>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <label for="appTitleInput" class="input-label">PWA App Title</label>
+            <input
+              type="text"
+              id="appTitleInput"
+              class="text-input"
+              value="My Mobile PWA"
+              placeholder="My Mobile PWA"
+            />
+          </div>
+          <div>
+            <label for="themeColorInput" class="input-label">PWA Theme Color</label>
+            <div class="color-picker-row">
+              <input type="color" id="themeColorPicker" value="#0D1117" class="color-swatch" />
+              <input type="text" id="themeColorInput" value="#0D1117" class="text-input" maxlength="7" />
+            </div>
+          </div>
+        </div>
+
+        <p id="deployError" class="error-text hidden"></p>
+
+        <div id="deployProgressBox" class="progress-box hidden">
+          <div class="spinner"></div>
+          <div class="progress-text-wrap">
+            <strong id="deployProgressStep">Uploading to GitHub...</strong>
+            <div class="progress-bar-track">
+              <div id="deployProgressBar" class="progress-bar-fill" style="width: 15%"></div>
+            </div>
+          </div>
+        </div>
+
+        <button id="deployBtn" type="button" class="btn btn-deploy btn-block" disabled>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Deploy Public PWA to GitHub Pages
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 4: LIVE PWA RESULT CARD -->
+    <section id="resultSection" class="card result-card hidden">
+      <div class="result-badge-row">
+        <span class="success-dot"></span>
+        <strong class="result-heading">PWA Published to GitHub Pages!</strong>
+      </div>
+
+      <p class="result-note">
+        Your files are committed and GitHub Pages is building. On brand-new repositories, GitHub Pages takes <strong>~30–60 seconds</strong> to finish going live.
+      </p>
+
+      <div id="pagesStatusBanner" class="pages-status-banner">
+        <span id="pagesStatusDot" class="pulse-dot"></span>
+        <span id="pagesStatusText">Checking live GitHub Pages build status...</span>
+      </div>
+
+      <div class="live-url-box">
+        <a id="resultPagesLink" href="#" target="_blank" rel="noopener noreferrer" class="live-url-text">
+          https://username.github.io/my-mobile-pwa/
+        </a>
+        <button id="copyUrlBtn" type="button" class="btn btn-secondary btn-sm">
+          Copy
+        </button>
+      </div>
+
+      <div class="action-buttons-row">
+        <a id="openPwaBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+          Open Live PWA &rarr;
+        </a>
+        <button id="sharePwaBtn" type="button" class="btn btn-secondary">
+          Share Link
+        </button>
+      </div>
+
+      <!-- QR Code for instant mobile scan / install -->
+      <div class="qr-container">
+        <canvas id="qrCanvas" width="160" height="160" class="qr-canvas"></canvas>
+        <span class="qr-caption">Scan or open link on mobile browser &rarr; "Add to Home Screen"</span>
+      </div>
+
+      <div class="result-footer">
+        <a id="resultRepoLink" href="#" target="_blank" rel="noopener noreferrer" class="repo-link">
+          View GitHub Repository &amp; Commit &rarr;
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!-- Local HTML Preview Modal -->
+  <div id="previewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <strong>Local Preview (index.html)</strong>
+        <button id="closePreviewBtn" type="button" class="btn btn-ghost btn-sm">Close</button>
+      </div>
+      <iframe id="previewIframe" class="preview-iframe" sandbox="allow-scripts allow-forms"></iframe>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
