@@ -117,6 +117,49 @@
       </div>
     </section>
 
+    <!-- AI PROMPT TEMPLATE CARD -->
+    <section class="card prompt-card" id="promptSection">
+      <div class="card-header">
+        <div class="prompt-icon-badge" aria-hidden="true">✨</div>
+        <div class="card-title-group">
+          <h2>AI PWA Prompt Template</h2>
+          <p class="card-caption">Copy this prompt into ChatGPT, Claude, or Gemini to generate a ready-to-deploy PWA</p>
+        </div>
+        <button id="togglePromptPreviewBtn" type="button" class="btn btn-ghost btn-sm">
+          View
+        </button>
+      </div>
+
+      <div class="stack-md">
+        <div>
+          <label for="promptIdeaInput" class="input-label">What app do you want AI to build? (optional)</label>
+          <input
+            type="text"
+            id="promptIdeaInput"
+            class="text-input"
+            placeholder="e.g. A habit tracker with streaks and dark mode"
+          />
+        </div>
+
+        <div id="promptPreviewBox" class="prompt-preview-box hidden">
+          <textarea
+            id="promptTemplateTextarea"
+            class="code-textarea prompt-textarea"
+            rows="10"
+            readonly
+          ></textarea>
+        </div>
+
+        <button id="copyPromptBtn" type="button" class="btn btn-primary btn-block">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy AI PWA Prompt Template
+        </button>
+      </div>
+    </section>
+
     <!-- STEP 2: UPLOAD OR PASTE HTML / PWA FILES -->
     <section class="card" id="filesSection">
       <div class="card-header">

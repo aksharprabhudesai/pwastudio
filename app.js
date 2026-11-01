@@ -59,6 +59,12 @@ const el = {
   userLogin: document.getElementById('userLogin'),
   logoutBtn: document.getElementById('logoutBtn'),
 
+  togglePromptPreviewBtn: document.getElementById('togglePromptPreviewBtn'),
+  promptIdeaInput: document.getElementById('promptIdeaInput'),
+  promptPreviewBox: document.getElementById('promptPreviewBox'),
+  promptTemplateTextarea: document.getElementById('promptTemplateTextarea'),
+  copyPromptBtn: document.getElementById('copyPromptBtn'),
+
   clearFilesBtn: document.getElementById('clearFilesBtn'),
   tabUploadBtn: document.getElementById('tabUploadBtn'),
   tabPasteBtn: document.getElementById('tabPasteBtn'),
@@ -142,6 +148,7 @@ init();
 async function init() {
   bindEvents();
   renderShortcutsUI();
+  updatePromptTemplateText();
 
   // Immediately restore saved token & user from localStorage so the user never has to re-enter it
   if (state.token) {
@@ -210,6 +217,23 @@ function bindEvents() {
     renderAuthUI();
     updateUrlPreview();
     updateDeployButtonState();
+  });
+
+  // AI PWA Prompt Template
+  el.togglePromptPreviewBtn.addEventListener('click', () => {
+    const isHidden = el.promptPreviewBox.classList.toggle('hidden');
+    el.togglePromptPreviewBtn.textContent = isHidden ? 'View' : 'Hide';
+  });
+
+  el.promptIdeaInput.addEventListener('input', () => {
+    updatePromptTemplateText();
+  });
+
+  el.copyPromptBtn.addEventListener('click', async () => {
+    updatePromptTemplateText();
+    const promptText = el.promptTemplateTextarea.value;
+    await navigator.clipboard.writeText(promptText);
+    showToast('AI PWA Prompt copied to clipboard!');
   });
 
   // Tabs
@@ -1315,3 +1339,39 @@ function getSampleHtmlTemplate() {
 </body>
 </html>`;
 }
+
+function updatePromptTemplateText() {
+  const idea = el.promptIdeaInput?.value?.trim() || '[DESCRIBE YOUR APP IDEA HERE]';
+  if (el.promptTemplateTextarea) {
+    el.promptTemplateTextarea.value = buildAiPwaPrompt(idea);
+  }
+}
+
+function buildAiPwaPrompt(appIdea) {
+  return `Build a complete, production-ready, mobile-first Progressive Web App (PWA) for:
+"${appIdea}"
+
+Please follow ALL of these strict requirements so I can directly upload and deploy it to GitHub Pages as an installable mobile app:
+
+1. MOBILE-FIRST UI & UX:
+   - Design for mobile screens first (max-width: 480px centered on desktop, 100dvh, touch-friendly 44px+ tap targets, no horizontal scroll, safe-area-inset padding).
+   - Use 16px+ font size on all <input>, <select>, and <textarea> elements to prevent mobile browser auto-zoom on focus.
+   - Persist all user data locally in the browser using \`localStorage\` or \`IndexedDB\` so it works 100% offline with zero backend.
+
+2. REQUIRED PWA TAGS IN \`index.html\`:
+   - Include a descriptive \`<title>\` tag (this will be used as the app name).
+   - Include \`<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">\`.
+   - Include \`<meta name="theme-color" content="#0D1117">\` and \`<meta name="apple-mobile-web-app-capable" content="yes">\`.
+   - Include \`<link rel="manifest" href="./manifest.json">\` and \`<link rel="apple-touch-icon" href="./icon-192.png">\` (use relative \`./\` paths so it works in a GitHub Pages subfolder \`https://<user>.github.io/<repo>/\`).
+   - Register the Service Worker using relative path \`navigator.serviceWorker.register('./sw.js')\`.
+
+3. INSTALLABLE WEB APP MANIFEST (\`manifest.json\`) & ICONS:
+   - Provide a valid \`manifest.json\` with \`"display": "standalone"\`, \`"start_url": "./index.html"\`, \`"scope": "./"\`, \`"background_color"\`, \`"theme_color"\`, and \`"icons"\` referencing \`./icon-192.png\` (192x192) and \`./icon-512.png\` (512x512) (plus an inline SVG icon or dynamic <canvas> favicon/apple-touch-icon fallback).
+
+4. OFFLINE SERVICE WORKER (\`sw.js\`):
+   - Provide a \`sw.js\` that caches \`./\`, \`./index.html\`, \`./manifest.json\`, and all assets on \`install\`, cleans up old caches on \`activate\`, and serves cached assets offline on \`fetch\`.
+
+5. OUTPUT FORMAT:
+   - Provide \`index.html\` as a complete, self-contained single file (with embedded CSS & JS) OR provide the files (\`index.html\`, \`manifest.json\`, \`sw.js\`) clearly so I can paste \`index.html\` or upload the files directly into my GitHub Pages PWA Deployer.`;
+}
+
