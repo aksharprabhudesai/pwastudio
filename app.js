@@ -87,7 +87,11 @@ const el = {
   fileChips: document.getElementById('fileChips'),
   previewLocalBtn: document.getElementById('previewLocalBtn'),
 
+  existingRepoPickerGroup: document.getElementById('existingRepoPickerGroup'),
+  existingRepoSelect: document.getElementById('existingRepoSelect'),
+  refreshReposBtn: document.getElementById('refreshReposBtn'),
   repoNameInput: document.getElementById('repoNameInput'),
+  overwriteRepoCheckbox: document.getElementById('overwriteRepoCheckbox'),
   liveUrlPreview: document.getElementById('liveUrlPreview'),
   appTitleInput: document.getElementById('appTitleInput'),
   themeColorPicker: document.getElementById('themeColorPicker'),
@@ -282,7 +286,25 @@ function bindEvents() {
   });
 
   // Inputs
+  el.existingRepoSelect.addEventListener('change', (e) => {
+    const selectedRepo = e.target.value;
+    if (selectedRepo) {
+      el.repoNameInput.value = selectedRepo;
+      el.overwriteRepoCheckbox.checked = true;
+      updateUrlPreview();
+      updateDeployButtonState();
+    }
+  });
+
+  el.refreshReposBtn.addEventListener('click', () => {
+    fetchUserRepos();
+    showToast('Refreshing repositories...');
+  });
+
   el.repoNameInput.addEventListener('input', () => {
+    if (el.existingRepoSelect.value && el.existingRepoSelect.value !== el.repoNameInput.value.trim()) {
+      el.existingRepoSelect.value = '';
+    }
     updateUrlPreview();
     updateDeployButtonState();
   });
@@ -388,6 +410,7 @@ async function verifyAndConnectToken(token, silent) {
     renderAuthUI();
     updateUrlPreview();
     updateDeployButtonState();
+    fetchUserRepos();
     if (!silent) showToast(`Saved & connected as @${user.login}`);
   } catch (err) {
     // Keep token in localStorage on offline/network errors so user doesn't have to re-enter it!
@@ -399,6 +422,30 @@ async function verifyAndConnectToken(token, silent) {
     el.saveTokenBtn.disabled = false;
     el.saveTokenBtn.textContent = 'Connect';
   }
+}
+
+async function fetchUserRepos() {
+  if (!state.token || !state.user) return;
+  try {
+    const res = await githubFetch(
+      'https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner',
+      state.token
+    );
+    if (!res.ok) return;
+    const repos = await res.json();
+    if (!Array.isArray(repos)) return;
+
+    const currentVal = el.repoNameInput.value.trim();
+    const options = [
+      `<option value="">+ Create New Repository (or type below)</option>`,
+      ...repos.map((r) => {
+        const sel = r.name === currentVal ? 'selected' : '';
+        return `<option value="${escapeHtml(r.name)}" ${sel}>${escapeHtml(r.name)}${r.has_pages ? ' (Pages Live)' : ''}</option>`;
+      })
+    ];
+    el.existingRepoSelect.innerHTML = options.join('');
+    el.existingRepoPickerGroup.classList.remove('hidden');
+  } catch (_) {}
 }
 
 function renderAuthUI() {
@@ -413,6 +460,7 @@ function renderAuthUI() {
   } else {
     el.loggedOutView.classList.remove('hidden');
     el.loggedInView.classList.add('hidden');
+    el.existingRepoPickerGroup.classList.add('hidden');
     el.step1Badge.classList.remove('done');
     el.step1Badge.textContent = '1';
   }
@@ -557,7 +605,7 @@ async function importRawFiles(files) {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
-      if (slug) {
+      if (slug && !el.existingRepoSelect?.value) {
         el.repoNameInput.value = slug;
         updateUrlPreview();
       }
@@ -875,6 +923,7 @@ async function deployToGitHubPages() {
   const owner = state.user?.login;
   const repo = sanitizeRepoName(el.repoNameInput.value);
   const appTitle = el.appTitleInput.value.trim() || repo;
+  const allowOverwrite = el.overwriteRepoCheckbox ? el.overwriteRepoCheckbox.checked : true;
 
   if (!token || !owner || !repo || state.finalFiles.length === 0) return;
 
@@ -886,7 +935,7 @@ async function deployToGitHubPages() {
 
   try {
     setProgress('1/5 Checking or creating public repository...', 15);
-    const defaultBranch = await ensurePublicRepo(token, owner, repo, appTitle);
+    const defaultBranch = await ensurePublicRepo(token, owner, repo, appTitle, allowOverwrite);
 
     setProgress(`2/5 Reading '${defaultBranch}' branch reference...`, 30);
     const headCommitSha = await getBranchHeadSha(token, owner, repo, defaultBranch);
@@ -925,6 +974,8 @@ async function deployToGitHubPages() {
     el.step3Badge.classList.add('done');
     el.step3Badge.textContent = '✓';
 
+    fetchUserRepos();
+
     showDeploymentSuccess({
       repoUrl: `https://github.com/${owner}/${repo}`,
       pagesUrl,
@@ -946,9 +997,14 @@ function setProgress(text, percent) {
   el.deployProgressBar.style.width = `${percent}%`;
 }
 
-async function ensurePublicRepo(token, owner, repo, appTitle) {
+async function ensurePublicRepo(token, owner, repo, appTitle, allowOverwrite) {
   const checkRes = await githubFetch(`https://api.github.com/repos/${owner}/${repo}`, token);
   if (checkRes.ok) {
+    if (!allowOverwrite) {
+      throw new Error(
+        `Repository '${owner}/${repo}' already exists. Enable "Allow overwriting / updating if repository already exists" or choose a new name.`
+      );
+    }
     const repoData = await checkRes.json();
     const branch = repoData.default_branch || 'main';
     if (repoData.size === 0) {
@@ -1166,6 +1222,7 @@ function renderShortcutsUI() {
           <div class="shortcut-top">
             <div class="shortcut-icon" style="background:${escapeHtml(bg)}">${escapeHtml(initials)}</div>
             <div class="shortcut-actions">
+              <button type="button" class="shortcut-action-btn" data-action="overwrite" data-idx="${idx}" title="Update / Overwrite Repo">↻</button>
               <button type="button" class="shortcut-action-btn" data-action="share" data-idx="${idx}" title="Share Link">↗</button>
               <button type="button" class="shortcut-action-btn" data-action="remove" data-idx="${idx}" title="Remove Shortcut">✕</button>
             </div>
@@ -1186,7 +1243,16 @@ function renderShortcutsUI() {
       const app = state.deployedApps[idx];
       if (!app) return;
 
-      if (action === 'remove') {
+      if (action === 'overwrite') {
+        el.repoNameInput.value = app.repo;
+        el.appTitleInput.value = app.title || app.repo;
+        if (el.overwriteRepoCheckbox) el.overwriteRepoCheckbox.checked = true;
+        if (el.existingRepoSelect) el.existingRepoSelect.value = app.repo;
+        updateUrlPreview();
+        updateDeployButtonState();
+        document.getElementById('filesSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        showToast(`Selected '${app.repo}' to overwrite!`);
+      } else if (action === 'remove') {
         state.deployedApps.splice(idx, 1);
         localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(state.deployedApps));
         renderShortcutsUI();

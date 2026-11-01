@@ -279,6 +279,16 @@
       </div>
 
       <div class="stack-md">
+        <div id="existingRepoPickerGroup" class="hidden">
+          <div class="row-between" style="margin-bottom: 6px;">
+            <label for="existingRepoSelect" class="input-label" style="margin-bottom: 0;">Or Select Existing Repository to Update / Overwrite</label>
+            <button id="refreshReposBtn" type="button" class="btn btn-ghost btn-xs">↻ Refresh</button>
+          </div>
+          <select id="existingRepoSelect" class="text-input select-input">
+            <option value="">+ Create New Repository (or type below)</option>
+          </select>
+        </div>
+
         <div>
           <label for="repoNameInput" class="input-label">Public Repository Name</label>
           <input
@@ -295,6 +305,14 @@
             Live URL: <code id="liveUrlPreview">https://username.github.io/my-mobile-pwa/</code>
           </p>
         </div>
+
+        <label class="checkbox-row" for="overwriteRepoCheckbox">
+          <input type="checkbox" id="overwriteRepoCheckbox" checked />
+          <div class="checkbox-text">
+            <strong>Allow overwriting / updating if repository already exists</strong>
+            <span>Replaces the files in the repository with this new upload and updates GitHub Pages</span>
+          </div>
+        </label>
 
         <div class="two-col">
           <div>

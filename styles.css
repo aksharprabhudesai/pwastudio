@@ -882,6 +882,46 @@ html, body {
   color: var(--text-muted);
 }
 
+.select-input {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+
+.checkbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.checkbox-text strong {
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.checkbox-text span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .hidden {
   display: none !important;
 }
