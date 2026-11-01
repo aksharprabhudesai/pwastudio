@@ -180,14 +180,36 @@ object PwaInspectorAndFixer {
                     |  <script>
                     |    if ('serviceWorker' in navigator) {
                     |      window.addEventListener('load', () => {
-                    |        navigator.serviceWorker.register('./$swFileName').catch(err => console.warn('SW registration failed:', err));
+                    |        navigator.serviceWorker.register('./$swFileName').then((reg) => {
+                    |          reg.update().catch(() => {});
+                    |          document.addEventListener('visibilitychange', () => {
+                    |            if (document.visibilityState === 'visible') reg.update().catch(() => {});
+                    |          });
+                    |          reg.addEventListener('updatefound', () => {
+                    |            val w = reg.installing;
+                    |            if (w != null) {
+                    |              w.addEventListener('statechange', () => {
+                    |                if (w.state === 'installed' && navigator.serviceWorker.controller != null) {
+                    |                  w.postMessage(mapOf("type" to "SKIP_WAITING"));
+                    |                }
+                    |              });
+                    |            }
+                    |          });
+                    |        }).catch(err => console.warn('SW registration failed:', err));
+                    |        var refreshing = false;
+                    |        navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    |          if (!refreshing) {
+                    |            refreshing = true;
+                    |            window.location.reload();
+                    |          }
+                    |        });
                     |      });
                     |    }
                     |  </script>
                 """.trimMargin()
                 htmlModified = true
                 html = injectBeforeBodyClose(html, swScript)
-                fixes.add("Injected Service Worker registration script for './$swFileName' into index.html.")
+                fixes.add("Injected auto-updating Service Worker registration script for './$swFileName' into index.html.")
             }
 
             if (htmlModified) {
@@ -299,8 +321,30 @@ object PwaInspectorAndFixer {
             |  self.clients.claim();
             |});
             |
+            |self.addEventListener('message', (event) => {
+            |  if (event.data && event.data.type === 'SKIP_WAITING') {
+            |    self.skipWaiting();
+            |  }
+            |});
+            |
             |self.addEventListener('fetch', (event) => {
             |  if (event.request.method !== 'GET') return;
+            |  const url = new URL(event.request.url);
+            |  const isHtmlOrCore = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
+            |
+            |  if (isHtmlOrCore) {
+            |    event.respondWith(
+            |      fetch(event.request).then((response) => {
+            |        if (response && response.status === 200) {
+            |          const cloned = response.clone();
+            |          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+            |        }
+            |        return response;
+            |      }).catch(() => caches.match(event.request))
+            |    );
+            |    return;
+            |  }
+            |
             |  event.respondWith(
             |    caches.match(event.request).then((cached) => {
             |      return cached || fetch(event.request).then((response) => {

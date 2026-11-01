@@ -40,6 +40,7 @@ const state = {
 
 // DOM Elements
 const el = {
+  checkUpdateBtn: document.getElementById('checkUpdateBtn'),
   installAppBtn: document.getElementById('installAppBtn'),
   shortcutsSection: document.getElementById('shortcutsSection'),
   shortcutsCountBadge: document.getElementById('shortcutsCountBadge'),
@@ -141,10 +142,84 @@ el.installAppBtn.addEventListener('click', async () => {
   el.installAppBtn.classList.add('hidden');
 });
 
-if ('serviceWorker' in navigator) {
+setupPwaAutoUpdate();
+
+function setupPwaAutoUpdate() {
+  if (!('serviceWorker' in navigator)) return;
+
+  let registration = null;
+
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      registration = reg;
+
+      // 1. Immediately check for an updated service worker from the server
+      reg.update().catch(() => {});
+
+      // 2. Whenever user resumes/switches back to the installed PWA on mobile, check for updates
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          reg.update().catch(() => {});
+        }
+      });
+
+      // 3. Periodic check every 15 minutes while app is active
+      setInterval(() => {
+        reg.update().catch(() => {});
+      }, 15 * 60 * 1000);
+
+      // 4. If a new version is waiting, immediately instruct it to take over
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            newWorker.postMessage({ type: 'SKIP_WAITING' });
+            showToast('New update detected, refreshing...');
+          }
+        });
+      });
+    }).catch(() => {});
+
+    // 5. When the new service worker takes over, reload page seamlessly
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
   });
+
+  // Manual update check button in header
+  if (el.checkUpdateBtn) {
+    el.checkUpdateBtn.addEventListener('click', async () => {
+      showToast('Checking for updates...');
+      if (!registration) {
+        try {
+          registration = await navigator.serviceWorker.getRegistration();
+        } catch (_) {}
+      }
+      if (registration) {
+        try {
+          await registration.update();
+          setTimeout(() => {
+            if (!registration.installing && !registration.waiting) {
+              showToast('App is up to date!');
+            }
+          }, 1200);
+        } catch (err) {
+          showToast('Could not check for updates offline.');
+        }
+      } else {
+        window.location.reload();
+      }
+    });
+  }
 }
 
 init();
@@ -731,10 +806,46 @@ async function runPwaInspector() {
       `  self.clients.claim();`,
       `});`,
       ``,
+      `self.addEventListener('message', (event) => {`,
+      `  if (event.data && event.data.type === 'SKIP_WAITING') {`,
+      `    self.skipWaiting();`,
+      `  }`,
+      `});`,
+      ``,
       `self.addEventListener('fetch', (event) => {`,
       `  if (event.request.method !== 'GET') return;`,
+      `  const url = new URL(event.request.url);`,
+      `  const isHtml = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/');`,
+      `  const isCore = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');`,
+      ``,
+      `  // Network-First for HTML/core code so installed apps update immediately when online`,
+      `  if (isHtml || isCore) {`,
+      `    event.respondWith(`,
+      `      fetch(event.request)`,
+      `        .then((networkResponse) => {`,
+      `          if (networkResponse && networkResponse.status === 200) {`,
+      `            const clone = networkResponse.clone();`,
+      `            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));`,
+      `          }`,
+      `          return networkResponse;`,
+      `        })`,
+      `        .catch(() => caches.match(event.request))`,
+      `    );`,
+      `    return;`,
+      `  }`,
+      ``,
+      `  // Stale-While-Revalidate for other assets`,
       `  event.respondWith(`,
-      `    caches.match(event.request).then((cached) => cached || fetch(event.request))`,
+      `    caches.match(event.request).then((cached) => {`,
+      `      const fetchPromise = fetch(event.request).then((networkResponse) => {`,
+      `        if (networkResponse && networkResponse.status === 200) {`,
+      `          const clone = networkResponse.clone();`,
+      `          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));`,
+      `        }`,
+      `        return networkResponse;`,
+      `      }).catch(() => {});`,
+      `      return cached || fetchPromise;`,
+      `    })`,
       `  );`,
       `});`
     ].join('\n');
@@ -744,7 +855,7 @@ async function runPwaInspector() {
       bytes: textEncoder.encode(swCode),
       isAutoGenerated: true
     });
-    fixes.push(`Auto-generated offline Service Worker ('sw.js').`);
+    fixes.push(`Auto-generated offline & auto-updating Service Worker ('sw.js').`);
   }
 
   // 5. Inspect index.html for viewport, manifest link, and serviceWorker registration
@@ -780,13 +891,43 @@ async function runPwaInspector() {
 
   if (!hasSwRegister) {
     htmlModified = true;
-    const swSnippet = `\n  <script>\n    if ('serviceWorker' in navigator) {\n      window.addEventListener('load', () => {\n        navigator.serviceWorker.register('./${swPath}').catch(() => {});\n      });\n    }\n  </script>`;
+    const swSnippet = [
+      `\n  <script>`,
+      `    if ('serviceWorker' in navigator) {`,
+      `      window.addEventListener('load', () => {`,
+      `        navigator.serviceWorker.register('./${swPath}').then((reg) => {`,
+      `          reg.update().catch(() => {});`,
+      `          document.addEventListener('visibilitychange', () => {`,
+      `            if (document.visibilityState === 'visible') reg.update().catch(() => {});`,
+      `          });`,
+      `          reg.addEventListener('updatefound', () => {`,
+      `            const w = reg.installing;`,
+      `            if (w) {`,
+      `              w.addEventListener('statechange', () => {`,
+      `                if (w.state === 'installed' && navigator.serviceWorker.controller) {`,
+      `                  w.postMessage({ type: 'SKIP_WAITING' });`,
+      `                }`,
+      `              });`,
+      `            }`,
+      `          });`,
+      `        }).catch(() => {});`,
+      `        let refreshing = false;`,
+      `        navigator.serviceWorker.addEventListener('controllerchange', () => {`,
+      `          if (!refreshing) {`,
+      `            refreshing = true;`,
+      `            window.location.reload();`,
+      `          }`,
+      `        });`,
+      `      });`,
+      `    }`,
+      `  </script>`
+    ].join('\n');
     if (/<\/body>/i.test(html)) {
       html = html.replace(/<\/body>/i, `${swSnippet}\n</body>`);
     } else {
       html = `${html}\n${swSnippet}`;
     }
-    fixes.push(`Injected Service Worker registration script into index.html.`);
+    fixes.push(`Injected auto-updating Service Worker registration script into index.html.`);
   }
 
   if (htmlModified) {
@@ -1427,18 +1568,72 @@ Please follow ALL of these strict requirements so I can directly upload and depl
    - Use 16px+ font size on all <input>, <select>, and <textarea> elements to prevent mobile browser auto-zoom on focus.
    - Persist all user data locally in the browser using \`localStorage\` or \`IndexedDB\` so it works 100% offline with zero backend.
 
-2. REQUIRED PWA TAGS IN \`index.html\`:
+2. REQUIRED PWA TAGS & AUTO-UPDATE REGISTRATION IN \`index.html\`:
    - Include a descriptive \`<title>\` tag (this will be used as the app name).
    - Include \`<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">\`.
    - Include \`<meta name="theme-color" content="#0D1117">\` and \`<meta name="apple-mobile-web-app-capable" content="yes">\`.
    - Include \`<link rel="manifest" href="./manifest.json">\` and \`<link rel="apple-touch-icon" href="./icon-192.png">\` (use relative \`./\` paths so it works in a GitHub Pages subfolder \`https://<user>.github.io/<repo>/\`).
-   - Register the Service Worker using relative path \`navigator.serviceWorker.register('./sw.js')\`.
+   - Register the Service Worker with AUTO-UPDATE logic so the installed app automatically refreshes when reopened or when updates are published:
+     \`\`\`javascript
+     if ('serviceWorker' in navigator) {
+       window.addEventListener('load', () => {
+         navigator.serviceWorker.register('./sw.js').then((reg) => {
+           reg.update().catch(() => {});
+           document.addEventListener('visibilitychange', () => {
+             if (document.visibilityState === 'visible') reg.update().catch(() => {});
+           });
+           reg.addEventListener('updatefound', () => {
+             const w = reg.installing;
+             if (w) {
+               w.addEventListener('statechange', () => {
+                 if (w.state === 'installed' && navigator.serviceWorker.controller) {
+                   w.postMessage({ type: 'SKIP_WAITING' });
+                 }
+               });
+             }
+           });
+         }).catch(() => {});
+         let refreshing = false;
+         navigator.serviceWorker.addEventListener('controllerchange', () => {
+           if (!refreshing) {
+             refreshing = true;
+             window.location.reload();
+           }
+         });
+       });
+     }
+     \`\`\`
 
 3. INSTALLABLE WEB APP MANIFEST (\`manifest.json\`) & ICONS:
    - Provide a valid \`manifest.json\` with \`"display": "standalone"\`, \`"start_url": "./index.html"\`, \`"scope": "./"\`, \`"background_color"\`, \`"theme_color"\`, and \`"icons"\` referencing \`./icon-192.png\` (192x192) and \`./icon-512.png\` (512x512) (plus an inline SVG icon or dynamic <canvas> favicon/apple-touch-icon fallback).
 
-4. OFFLINE SERVICE WORKER (\`sw.js\`):
-   - Provide a \`sw.js\` that caches \`./\`, \`./index.html\`, \`./manifest.json\`, and all assets on \`install\`, cleans up old caches on \`activate\`, and serves cached assets offline on \`fetch\`.
+4. AUTO-UPDATING & OFFLINE SERVICE WORKER (\`sw.js\`):
+   - Provide a \`sw.js\` with:
+     a) \`self.skipWaiting()\` on install and \`self.clients.claim()\` on activate.
+     b) A \`message\` event listener that calls \`self.skipWaiting()\` when receiving \`{ type: 'SKIP_WAITING' }\`.
+     c) NETWORK-FIRST caching strategy for HTML and core scripts (falling back to cache when offline) so users immediately get the newest version when opening the app online:
+        \`\`\`javascript
+        self.addEventListener('fetch', (event) => {
+          if (event.request.method !== 'GET') return;
+          const url = new URL(event.request.url);
+          const isHtmlOrCore = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
+          if (isHtmlOrCore) {
+            event.respondWith(
+              fetch(event.request).then((res) => {
+                if (res && res.status === 200) {
+                  const clone = res.clone();
+                  caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                }
+                return res;
+              }).catch(() => caches.match(event.request))
+            );
+            return;
+          }
+          event.respondWith(
+            caches.match(event.request).then((cached) => cached || fetch(event.request))
+          );
+        });
+        \`\`\`
 
 5. OUTPUT FORMAT:
    - Provide \`index.html\` as a complete, self-contained single file (with embedded CSS & JS) OR provide the files (\`index.html\`, \`manifest.json\`, \`sw.js\`) clearly so I can paste \`index.html\` or upload the files directly into my GitHub Pages PWA Deployer.`;
