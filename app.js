@@ -160,6 +160,9 @@ async function init() {
     renderAuthUI();
     updateUrlPreview();
     updateDeployButtonState();
+    if (state.user) {
+      fetchUserRepos();
+    }
     verifyAndConnectToken(state.token, true);
   } else {
     updateUrlPreview();
