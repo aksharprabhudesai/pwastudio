@@ -1561,81 +1561,60 @@ function buildAiPwaPrompt(appIdea) {
   return `Build a complete, production-ready, mobile-first Progressive Web App (PWA) for:
 "${appIdea}"
 
-Please follow ALL of these strict requirements so I can directly upload and deploy it to GitHub Pages as an installable mobile app:
+Please follow ALL of these strict requirements so the app is installable, saves all data locally, and can be downloaded as a clean ZIP or uploaded directly to GitHub Pages:
 
-1. MOBILE-FIRST UI & UX:
-   - Design for mobile screens first (max-width: 480px centered on desktop, 100dvh, touch-friendly 44px+ tap targets, no horizontal scroll, safe-area-inset padding).
-   - Use 16px+ font size on all <input>, <select>, and <textarea> elements to prevent mobile browser auto-zoom on focus.
-   - Persist all user data locally in the browser using \`localStorage\` or \`IndexedDB\` so it works 100% offline with zero backend.
+1. 100% LOCAL STATE PERSISTENCE (OFFLINE-FIRST):
+   - Automatically save all user inputs, created data, edits, toggles, and settings to \`localStorage\` (or \`IndexedDB\`) on EVERY modification.
+   - Automatically restore the saved state when the app launches or reopens.
+   - Zero backend required — the app must work 100% offline with zero data loss on page refreshes or device reboots.
 
-2. REQUIRED PWA TAGS & AUTO-UPDATE REGISTRATION IN \`index.html\`:
-   - Include a descriptive \`<title>\` tag (this will be used as the app name).
-   - Include \`<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">\`.
-   - Include \`<meta name="theme-color" content="#0D1117">\` and \`<meta name="apple-mobile-web-app-capable" content="yes">\`.
-   - Include \`<link rel="manifest" href="./manifest.json">\` and \`<link rel="apple-touch-icon" href="./icon-192.png">\` (use relative \`./\` paths so it works in a GitHub Pages subfolder \`https://<user>.github.io/<repo>/\`).
-   - Register the Service Worker with AUTO-UPDATE logic so the installed app automatically refreshes when reopened or when updates are published:
-     \`\`\`javascript
-     if ('serviceWorker' in navigator) {
-       window.addEventListener('load', () => {
-         navigator.serviceWorker.register('./sw.js').then((reg) => {
-           reg.update().catch(() => {});
-           document.addEventListener('visibilitychange', () => {
-             if (document.visibilityState === 'visible') reg.update().catch(() => {});
-           });
-           reg.addEventListener('updatefound', () => {
-             const w = reg.installing;
-             if (w) {
-               w.addEventListener('statechange', () => {
-                 if (w.state === 'installed' && navigator.serviceWorker.controller) {
-                   w.postMessage({ type: 'SKIP_WAITING' });
-                 }
-               });
-             }
-           });
-         }).catch(() => {});
-         let refreshing = false;
-         navigator.serviceWorker.addEventListener('controllerchange', () => {
-           if (!refreshing) {
-             refreshing = true;
-             window.location.reload();
-           }
-         });
+2. COMPLETE PWA ICONS & INSTALLABILITY FILES:
+   - Provide ALL files required for an installable PWA:
+     a) \`manifest.json\`: Include \`"display": "standalone"\`, \`"start_url": "./index.html"\`, \`"scope": "./"\`, \`"background_color"\`, \`"theme_color"\`, and \`"icons"\` array with 192x192 and 512x512 entries with \`"purpose": "any maskable"\`.
+     b) App Icons: Provide an app icon (clean SVG \`icon.svg\` and embedded \`<canvas>\` script that generates \`icon-192.png\` & \`icon-512.png\` PNGs so icons are never missing).
+     c) \`index.html\` Header Tags: Include descriptive \`<title>\`, \`<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">\`, \`<meta name="theme-color" content="#0D1117">\`, \`<meta name="apple-mobile-web-app-capable" content="yes">\`, \`<link rel="manifest" href="./manifest.json">\`, and \`<link rel="apple-touch-icon" href="./icon-192.png">\`.
+
+3. AUTO-UPDATING SERVICE WORKER (\`sw.js\`) ON OPEN:
+   - In \`sw.js\`:
+     • Call \`self.skipWaiting()\` on install and \`self.clients.claim()\` on activate.
+     • Listen for \`{ type: 'SKIP_WAITING' }\` message to activate immediately.
+     • Use a NETWORK-FIRST fetch strategy for HTML and core scripts (\`.js\`, \`.css\`), falling back to cache when offline:
+       \`\`\`javascript
+       self.addEventListener('fetch', (event) => {
+         if (event.request.method !== 'GET') return;
+         const url = new URL(event.request.url);
+         const isHtmlOrCore = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
+         if (isHtmlOrCore) {
+           event.respondWith(
+             fetch(event.request).then((res) => {
+               if (res && res.status === 200) {
+                 const clone = res.clone();
+                 caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+               }
+               return res;
+             }).catch(() => caches.match(event.request))
+           );
+           return;
+         }
+         event.respondWith(
+           caches.match(event.request).then((cached) => cached || fetch(event.request))
+         );
        });
-     }
-     \`\`\`
+       \`\`\`
+   - In \`index.html\`:
+     • Check \`registration.update()\` on page load and on \`visibilitychange\` (\`document.visibilityState === 'visible'\`).
+     • Auto-reload when new version takes over via \`navigator.serviceWorker.addEventListener('controllerchange')\`.
 
-3. INSTALLABLE WEB APP MANIFEST (\`manifest.json\`) & ICONS:
-   - Provide a valid \`manifest.json\` with \`"display": "standalone"\`, \`"start_url": "./index.html"\`, \`"scope": "./"\`, \`"background_color"\`, \`"theme_color"\`, and \`"icons"\` referencing \`./icon-192.png\` (192x192) and \`./icon-512.png\` (512x512) (plus an inline SVG icon or dynamic <canvas> favicon/apple-touch-icon fallback).
+4. CLEAN ZIP EXPORT FEATURE:
+   - Include a built-in "Export PWA (.ZIP)" button in the app that bundles all necessary files into a clean ZIP archive using a lightweight client-side zip generator (or JSZip CDN):
+     - \`index.html\`
+     - \`manifest.json\`
+     - \`sw.js\`
+     - \`icon.svg\` and generated PNG icons
+     - \`.nojekyll\`
+   - The exported ZIP must be clean and uncompressed/deflated so users can directly extract it or upload it into GitHub Pages or PWA Studio in one tap.
 
-4. AUTO-UPDATING & OFFLINE SERVICE WORKER (\`sw.js\`):
-   - Provide a \`sw.js\` with:
-     a) \`self.skipWaiting()\` on install and \`self.clients.claim()\` on activate.
-     b) A \`message\` event listener that calls \`self.skipWaiting()\` when receiving \`{ type: 'SKIP_WAITING' }\`.
-     c) NETWORK-FIRST caching strategy for HTML and core scripts (falling back to cache when offline) so users immediately get the newest version when opening the app online:
-        \`\`\`javascript
-        self.addEventListener('fetch', (event) => {
-          if (event.request.method !== 'GET') return;
-          const url = new URL(event.request.url);
-          const isHtmlOrCore = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
-          if (isHtmlOrCore) {
-            event.respondWith(
-              fetch(event.request).then((res) => {
-                if (res && res.status === 200) {
-                  const clone = res.clone();
-                  caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                }
-                return res;
-              }).catch(() => caches.match(event.request))
-            );
-            return;
-          }
-          event.respondWith(
-            caches.match(event.request).then((cached) => cached || fetch(event.request))
-          );
-        });
-        \`\`\`
-
-5. OUTPUT FORMAT:
-   - Provide \`index.html\` as a complete, self-contained single file (with embedded CSS & JS) OR provide the files (\`index.html\`, \`manifest.json\`, \`sw.js\`) clearly so I can paste \`index.html\` or upload the files directly into my GitHub Pages PWA Deployer.`;
+5. MOBILE-FIRST UI DESIGN:
+   - 100dvh mobile container (centered on desktop, max-width: 480px), 44px+ touch targets, 16px+ form inputs to prevent auto-zoom, and clean dark/light theme.`;
 }
 
