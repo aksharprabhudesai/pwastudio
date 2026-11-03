@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pwa-github-deployer-v8';
+const CACHE_NAME = 'pwa-github-deployer-v9';
 const ASSETS = [
   './',
   './index.html',

@@ -1532,19 +1532,32 @@ function getSampleHtmlTemplate() {
   <title>Quick Notes PWA</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; max-width: 480px; margin: 0 auto; }
-    h1 { color: #58a6ff; font-size: 1.4rem; }
-    textarea { width: 100%; height: 220px; background: #161b22; color: #fff; border: 1px solid #30363d; border-radius: 12px; padding: 12px; font-size: 16px; }
-    p { color: #8b949e; font-size: 0.85rem; }
+    .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    h1 { color: #58a6ff; font-size: 1.4rem; margin: 0; }
+    .btn-share { background: #21262d; color: #58a6ff; border: 1px solid #30363d; border-radius: 8px; padding: 6px 12px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+    textarea { width: 100%; height: 220px; background: #161b22; color: #fff; border: 1px solid #30363d; border-radius: 12px; padding: 12px; font-size: 16px; box-sizing: border-box; }
+    p { color: #8b949e; font-size: 0.85rem; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <h1>📝 Quick Notes PWA</h1>
+  <div class="header-row">
+    <h1>📝 Quick Notes</h1>
+    <button id="shareBtn" class="btn-share" type="button">Share App</button>
+  </div>
   <p>Saved automatically on your phone—works offline!</p>
   <textarea id="pad" placeholder="Type your notes here..."></textarea>
   <script>
     const pad = document.getElementById('pad');
     pad.value = localStorage.getItem('quick_note') || '';
     pad.addEventListener('input', () => localStorage.setItem('quick_note', pad.value));
+    document.getElementById('shareBtn').addEventListener('click', async () => {
+      if (navigator.share) {
+        try { await navigator.share({ title: document.title, url: window.location.href }); } catch (_) {}
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('App link copied to clipboard!');
+      }
+    });
   </script>
 </body>
 </html>`;
@@ -1605,16 +1618,21 @@ Please follow ALL of these strict requirements so the app is installable, saves 
      • Check \`registration.update()\` on page load and on \`visibilitychange\` (\`document.visibilityState === 'visible'\`).
      • Auto-reload when new version takes over via \`navigator.serviceWorker.addEventListener('controllerchange')\`.
 
-4. CLEAN ZIP EXPORT FEATURE:
-   - Include a built-in "Export PWA (.ZIP)" button in the app that bundles all necessary files into a clean ZIP archive using a lightweight client-side zip generator (or JSZip CDN):
-     - \`index.html\`
-     - \`manifest.json\`
-     - \`sw.js\`
-     - \`icon.svg\` and generated PNG icons
-     - \`.nojekyll\`
-   - The exported ZIP must be clean and uncompressed/deflated so users can directly extract it or upload it into GitHub Pages or PWA Studio in one tap.
+4. IN-APP "SHARE APP" BUTTON ON THE GENERATED PWA:
+   - Include a clean, visible "Share App" button in the PWA's header or toolbar.
+   - When tapped, it must trigger the native mobile share sheet using \`navigator.share({ title: document.title, url: window.location.href })\` with a fallback to copying the URL to the clipboard (\`navigator.clipboard.writeText(window.location.href)\`) and showing a quick alert/toast.
 
-5. MOBILE-FIRST UI DESIGN:
+5. PROVIDE THE ZIP OF THE ENTIRE APP IN YOUR CHAT RESPONSE (NOT ON THE PWA HEADER):
+   - In your chat reply, provide the entire app as a downloadable clean ZIP file (or a Python/Bash script or base64 data URI link that downloads the zip file directly from your response).
+   - Do NOT place a download/export ZIP button on the header of the PWA itself — keep the PWA's user interface clean and dedicated purely to the app's functionality.
+   - Ensure the ZIP contains all necessary files at the root level:
+     • \`index.html\`
+     • \`manifest.json\`
+     • \`sw.js\`
+     • \`icon.svg\`, \`icon-192.png\`, \`icon-512.png\`
+     • \`.nojekyll\`
+
+6. MOBILE-FIRST UI DESIGN:
    - 100dvh mobile container (centered on desktop, max-width: 480px), 44px+ touch targets, 16px+ form inputs to prevent auto-zoom, and clean dark/light theme.`;
 }
 
